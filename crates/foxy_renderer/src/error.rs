@@ -1,22 +1,15 @@
 use thiserror::Error;
-use vulkano::{command_buffer::CommandBufferExecError, Validated};
 
 #[derive(Error, Debug)]
 pub enum RendererError {
   #[error("{0}")]
   Error(String),
   #[error("{0}")]
-  VulkanoError(#[from] vulkano::VulkanError),
+  LoadingError(#[from] ash::LoadingError),
   #[error("{0}")]
-  ValidatedVulkanoError(#[from] Validated<vulkano::VulkanError>),
+  VkResult(#[from] ash::vk::Result),
   #[error("{0}")]
-  AllocateImageError(#[from] Validated<vulkano::image::AllocateImageError>),
-  #[error("{0}")]
-  LoadingError(#[from] vulkano::LoadingError),
-  #[error("{0}")]
-  ValidationError(#[from] Box<vulkano::ValidationError>),
-  #[error("{0}")]
-  CommandBufferExecError(#[from] CommandBufferExecError),
+  AllocError(#[from] gpu_allocator::AllocationError),
   #[error("{0}")]
   IO(#[from] std::io::Error),
 }

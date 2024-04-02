@@ -115,7 +115,6 @@ impl Foxy {
   }
 
   pub(crate) fn render(&mut self, full_output: egui::FullOutput) -> bool {
-
     self
       .egui_state
       .handle_platform_output(&self.window, full_output.platform_output);

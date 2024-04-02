@@ -1,108 +1,83 @@
-use std::sync::Arc;
-
-use itertools::Itertools;
-use vulkano::{
-  instance::{Instance, InstanceCreateInfo, InstanceExtensions},
-  swapchain::Surface,
-  Version,
-  VulkanLibrary,
-};
-use witer::window::Window;
+use ash::{ext, khr, vk};
 
 use super::debug::Debug;
-use crate::{error::RendererError, renderer_error};
+use crate::error::RendererError;
 
-#[derive(Clone)]
 pub struct FoxyInstance {
-  _library: Arc<VulkanLibrary>,
-  instance: Arc<Instance>,
-  _debug: Arc<Debug>,
+  _debug: Debug,
+  instance: ash::Instance,
+  _entry: ash::Entry,
+}
+
+impl Drop for FoxyInstance {
+  fn drop(&mut self) {
+    self._debug.delete();
+    unsafe { self.instance.destroy_instance(None) };
+  }
 }
 
 impl FoxyInstance {
-  pub const ENABLE_VALIDATION_LAYERS: bool = cfg!(debug_assertions);
-  const VALIDATION_LAYERS: &'static [&'static str] = &["VK_LAYER_KHRONOS_validation"];
+  pub fn new() -> Result<Self, RendererError> {
+    let entry = ash::Entry::linked();
 
-  pub fn new(window: &Window) -> Result<Self, RendererError> {
-    let library = VulkanLibrary::new()?;
-    let instance = Self::new_instance(library.clone(), window)?;
-    let debug = Debug::new(instance.clone())?;
+    let app_name = c"Foxy";
+
+    let layer_names = [c"VK_LAYER_KHRONOS_validation"];
+    let layers_names_raw: Vec<*const core::ffi::c_char> =
+      layer_names.iter().map(|raw_name| raw_name.as_ptr()).collect();
+
+    let mut extension_names = [khr::surface::NAME.as_ptr(), khr::win32_surface::NAME.as_ptr()].to_vec();
+    extension_names.push(ext::debug_utils::NAME.as_ptr());
+
+    let supported_version = match unsafe { entry.try_enumerate_instance_version() }? {
+      // Vulkan 1.1+
+      Some(version) => version,
+      // Vulkan 1.0
+      None => vk::make_api_version(0, 1, 0, 0),
+    };
+
+    let major = vk::api_version_major(supported_version);
+    let minor = vk::api_version_minor(supported_version);
+    let patch = vk::api_version_patch(supported_version);
+    let variant = vk::api_version_variant(supported_version);
+    tracing::info!("This system can support Vulkan: {major}.{minor}.{patch}.{variant}");
+
+    let selected_version = vk::make_api_version(0, major, minor, 0);
+
+    let major = vk::api_version_major(selected_version);
+    let minor = vk::api_version_minor(selected_version);
+    let patch = vk::api_version_patch(selected_version);
+    let variant = vk::api_version_variant(selected_version);
+    tracing::info!("Requesting minimum Vulkan: {major}.{minor}.{patch}.{variant}");
+
+    let appinfo = vk::ApplicationInfo::default()
+      .application_name(app_name)
+      .application_version(0)
+      .engine_name(app_name)
+      .engine_version(0)
+      .api_version(selected_version);
+
+    let create_info = vk::InstanceCreateInfo::default()
+      .application_info(&appinfo)
+      .enabled_layer_names(&layers_names_raw)
+      .enabled_extension_names(&extension_names);
+
+    let instance: ash::Instance = unsafe { entry.create_instance(&create_info, None)? };
+
+    let _debug = Debug::new(&entry, &instance)?;
 
     Ok(Self {
-      _debug: debug,
+      _debug,
       instance,
-      _library: library,
+      _entry: entry,
     })
   }
 
-  pub fn vk(&self) -> &Arc<Instance> {
+  pub fn entry(&self) -> &ash::Entry {
+    &self._entry
+  }
+
+  pub fn instance(&self) -> &ash::Instance {
     &self.instance
-  }
-
-  fn new_instance(library: Arc<VulkanLibrary>, window: &Window) -> Result<Arc<Instance>, RendererError> {
-    let (requested_layers, requested_extensions) = Self::request_layers_and_extensions(&library, window)?;
-
-    let instance_create_info = InstanceCreateInfo {
-      enabled_layers: requested_layers,
-      enabled_extensions: requested_extensions,
-      engine_name: Some("Foxy Framework".to_owned()),
-      engine_version: Version::major_minor(1, 0),
-      ..InstanceCreateInfo::application_from_cargo_toml()
-    };
-
-    let instance = Instance::new(library, instance_create_info)?;
-
-    Ok(instance)
-  }
-
-  fn request_layers_and_extensions(
-    library: &VulkanLibrary,
-    window: &Window,
-  ) -> Result<(Vec<String>, InstanceExtensions), RendererError> {
-    let supported_layers = library.layer_properties()?;
-    let supported_layers = supported_layers.map(|l| l.name().to_owned()).collect_vec();
-    // debug!("Supported layers:\n{:#?}", supported_layers);
-
-    // Layers ----------------------
-
-    let mut requested_layers = Self::VALIDATION_LAYERS.iter().map(|l| (*l).to_owned()).collect_vec();
-
-    let mut missing_layers = Vec::new();
-    for layer in &requested_layers {
-      if !supported_layers.contains(layer) {
-        missing_layers.push(layer);
-      }
-    }
-
-    if !missing_layers.is_empty() {
-      return Err(renderer_error!(
-        "not all requested layers are supported on this device:\nMissing: {missing_layers:?}"
-      ));
-    }
-
-    if !Self::ENABLE_VALIDATION_LAYERS {
-      requested_layers.clear();
-    }
-
-    // Extensions ------------------
-
-    let supported_extensions = library.supported_extensions();
-    // debug!("Supported instance extensions:\n{:#?}", supported_extensions);
-
-    let mut requested_extensions = Surface::required_extensions(window);
-    requested_extensions = requested_extensions.union(&InstanceExtensions {
-      khr_surface: true,
-      ext_debug_utils: true,
-      ..Default::default()
-    });
-
-    if !supported_extensions.contains(&requested_extensions) {
-      return Err(renderer_error!(
-        "not all requested instance extensions are supported on this device:\nMissing: {:?}",
-        supported_extensions.difference(&requested_extensions)
-      ));
-    }
-
-    Ok((requested_layers, requested_extensions))
   }
 }

@@ -28,9 +28,10 @@ foxy_utils = { version = "0.3", path = "../../../foxy_utils" }
 
 witer = { version = "0.11", path = "../../../witer", features = ["rwh_05", "egui", "clipboard"], default-features = false }
 
-vulkano         = "0.34"
-vulkano-shaders = "0.34"
-# ash     = "0.38"
-# shaderc = "0.8"
+# vulkano         = "0.34"
+# vulkano-shaders = "0.34"
+ash           = { version = "0.38", features = ["linked"] }
+gpu-allocator = { version = "0.25", git = "https://github.com/Traverse-Research/gpu-allocator/", branch = "ash-0.38" }
+shaderc       = "0.8"
 
 egui = "0.27"
