@@ -205,7 +205,7 @@ impl FoxyDevice {
       .map(|e| e.extension_name_as_c_str().unwrap())
       .collect_vec();
 
-    tracing::debug!("Supported device extensions:\n{:#?}", supported_extensions);
+    // tracing::debug!("Supported device extensions:\n{:#?}", supported_extensions);
 
     let mut missing_extensions: Vec<&core::ffi::CStr> = Vec::new();
     for extension in Self::DEVICE_EXTENSIONS {
