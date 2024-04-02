@@ -13,9 +13,11 @@ use crate::{error::RendererError, renderer_error};
 pub struct FoxyDevice {
   graphics: FoxyQueue,
   present: FoxyQueue,
+
   logical: ash::Device,
   physical: vk::PhysicalDevice,
-  surface: Arc<FoxySurface>,
+
+  _surface: Arc<FoxySurface>,
   instance: Arc<FoxyInstance>,
 }
 
@@ -37,15 +39,9 @@ impl FoxyDevice {
       present,
       logical,
       physical,
-      surface,
+      _surface: surface,
       instance,
     })
-  }
-
-  pub fn delete(&mut self) {
-    unsafe {
-      self.logical.destroy_device(None);
-    }
   }
 
   pub fn physical(&self) -> &vk::PhysicalDevice {

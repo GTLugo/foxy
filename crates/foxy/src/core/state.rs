@@ -19,9 +19,6 @@ pub struct Foxy {
 
   pub(crate) debug_info: DebugInfo,
   pub(crate) fps_timer: Timer,
-  preferred_visibility: Visibility,
-  frame_count: u32,
-  is_revealed: bool,
 }
 
 impl Foxy {
@@ -47,7 +44,7 @@ impl Foxy {
     let egui_state = window.create_egui_state(egui_context.clone(), id, None);
 
     let time = time_settings.build();
-    let renderer = Renderer::new(window.clone())?;
+    let renderer = Renderer::new(window.clone(), preferred_visibility)?;
 
     Ok(Self {
       time,
@@ -58,9 +55,6 @@ impl Foxy {
       render_data: RenderData::default(),
       debug_info,
       fps_timer: Timer::new(),
-      preferred_visibility,
-      frame_count: 0,
-      is_revealed: false,
     })
   }
 
@@ -129,15 +123,6 @@ impl Foxy {
       error!("`{error}` Aborting...");
       return false;
     }
-
-    match (self.is_revealed, self.frame_count) {
-      (false, 3) => {
-        self.window.set_visibility(self.preferred_visibility);
-        self.is_revealed = true;
-      }
-      (false, _) => self.frame_count = self.frame_count.wrapping_add(1),
-      _ => (),
-    };
 
     if self.fps_timer.has_elapsed(Duration::from_millis(200)) {
       if let DebugInfo::Shown = self.debug_info {

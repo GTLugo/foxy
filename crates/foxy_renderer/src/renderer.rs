@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use ash::{ext, khr, vk};
 use foxy_time::Time;
 use gpu_allocator::{
   vulkan::{Allocator, AllocatorCreateDesc},
@@ -24,13 +23,16 @@ pub struct Renderer {
   device: Arc<FoxyDevice>,
   surface: Arc<FoxySurface>,
   instance: Arc<FoxyInstance>,
+
   window: Arc<Window>,
+  preferred_visibility: Visibility,
+  revealed: bool,
 }
 
 impl Renderer {
   pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
-  pub fn new(window: Arc<Window>) -> Result<Self, RendererError> {
+  pub fn new(window: Arc<Window>, preferred_visibility: Visibility) -> Result<Self, RendererError> {
     let instance = Arc::new(FoxyInstance::new()?);
     let surface = Arc::new(FoxySurface::new(&window, instance.clone())?);
     let device = Arc::new(FoxyDevice::new(surface.clone(), instance.clone())?);
@@ -49,12 +51,19 @@ impl Renderer {
       surface,
       instance,
       window,
+      preferred_visibility,
+      revealed: false,
     })
   }
 
-  pub fn delete(&mut self) {}
-
   pub fn render(&mut self, _render_time: &Time, _render_data: &RenderData) -> Result<(), RendererError> {
+    // do render
+
+    if !self.revealed {
+      self.revealed = true;
+      self.window.set_visibility(self.preferred_visibility);
+    }
+
     Ok(())
   }
 

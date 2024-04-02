@@ -12,6 +12,7 @@ use crate::renderer_error;
 pub struct FoxySurface {
   surface: vk::SurfaceKHR,
   loader: khr::surface::Instance,
+
   _instance: Arc<FoxyInstance>,
 }
 

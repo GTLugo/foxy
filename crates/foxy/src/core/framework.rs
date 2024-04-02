@@ -99,10 +99,6 @@ impl<App: Runnable> Framework<App> {
     debug!("Wrapping up game loop");
 
     self.app.delete();
-    self.foxy.renderer.delete();
-
-    // self.game_thread.join().map_err(|e| foxy_error!("{e:?}"))??;
-    // self.renderer.delete();
 
     info!("OTSU KON DESHITA!");
 
