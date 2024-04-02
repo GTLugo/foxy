@@ -28,8 +28,8 @@ impl FoxySurface {
     };
     let surface = unsafe {
       let surface_desc = vk::Win32SurfaceCreateInfoKHR::default()
-        .hwnd(window_handle.hwnd as *mut isize as isize)
-        .hinstance(window_handle.hinstance as *mut isize as isize);
+        .hwnd(window_handle.hwnd as *mut HWND as HWND)
+        .hinstance(window_handle.hinstance as *mut HINSTANCE as HINSTANCE);
       let surface_fn = win32_surface::Instance::new(instance.entry(), instance.instance());
       surface_fn.create_win32_surface(&surface_desc, None)
     }?;
