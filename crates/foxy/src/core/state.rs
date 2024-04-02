@@ -12,19 +12,27 @@ pub struct Foxy {
   pub(crate) time: Time,
   pub(crate) window: Arc<Window>,
   pub(crate) egui_context: egui::Context,
+  pub(crate) egui_state: witer::compat::egui::State,
 
   pub(crate) renderer: Renderer,
   pub(crate) render_data: RenderData,
 
   pub(crate) debug_info: DebugInfo,
   pub(crate) fps_timer: Timer,
+  preferred_visibility: Visibility,
   frame_count: u32,
   is_revealed: bool,
 }
 
 impl Foxy {
-  pub fn new(window: Arc<Window>, time_settings: TimeSettings, debug_info: DebugInfo) -> FoxyResult<Self> {
+  pub fn new(
+    preferred_visibility: Visibility,
+    window: Arc<Window>,
+    time_settings: TimeSettings,
+    debug_info: DebugInfo,
+  ) -> FoxyResult<Self> {
     let egui_context = egui::Context::default();
+    let id = egui_context.viewport_id();
 
     const BORDER_RADIUS: f32 = 6.0;
 
@@ -36,6 +44,7 @@ impl Foxy {
     };
 
     egui_context.set_visuals(visuals);
+    let egui_state = window.create_egui_state(egui_context.clone(), id, None);
 
     let time = time_settings.build();
     let renderer = Renderer::new(window.clone())?;
@@ -44,13 +53,29 @@ impl Foxy {
       time,
       window,
       egui_context,
+      egui_state,
       renderer,
       render_data: RenderData::default(),
       debug_info,
       fps_timer: Timer::new(),
+      preferred_visibility,
       frame_count: 0,
       is_revealed: false,
     })
+  }
+
+  pub(crate) fn handle_input(&mut self, message: &Message) -> bool {
+    let response = self.egui_state.on_window_event(&self.window, message);
+
+    if response.repaint {
+      self.egui_context.request_repaint();
+    }
+
+    response.consumed
+  }
+
+  pub(crate) fn take_egui_input(&mut self) -> RawInput {
+    self.egui_state.take_egui_input(&self.window)
   }
 
   pub fn delta_time(&self) -> Duration {
@@ -69,7 +94,7 @@ impl Foxy {
     self.window.key(key)
   }
 
-  pub fn mouse(&self, mouse: Mouse) -> ButtonState {
+  pub fn mouse(&self, mouse: MouseButton) -> ButtonState {
     self.window.mouse(mouse)
   }
 
@@ -89,19 +114,26 @@ impl Foxy {
     self.window.win()
   }
 
-  pub fn take_egui_raw_input(&self) -> RawInput {
-    RawInput::default()
-  }
+  pub(crate) fn render(&mut self, full_output: egui::FullOutput) -> bool {
 
-  pub(crate) fn render(&mut self) -> bool {
+    self
+      .egui_state
+      .handle_platform_output(&self.window, full_output.platform_output);
+
+    let tris = self
+      .egui_context
+      .tessellate(full_output.shapes, full_output.pixels_per_point);
+
+    self.render_data.egui_tris = Some(tris);
+
     if let Err(error) = self.renderer.render(&self.time, &self.render_data) {
       error!("`{error}` Aborting...");
       return false;
     }
 
     match (self.is_revealed, self.frame_count) {
-      (false, 10) => {
-        self.window.set_visibility(Visibility::Shown);
+      (false, 3) => {
+        self.window.set_visibility(self.preferred_visibility);
         self.is_revealed = true;
       }
       (false, _) => self.frame_count = self.frame_count.wrapping_add(1),

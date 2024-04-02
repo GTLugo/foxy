@@ -21,7 +21,7 @@ pub enum FoxyError {
   #[error("{0}")]
   IOError(#[from] std::io::Error),
   #[error("{0}")]
-  WiterError(#[from] witer::debug::error::WindowError),
+  WiterError(#[from] witer::error::WindowError),
 }
 
 #[macro_export]

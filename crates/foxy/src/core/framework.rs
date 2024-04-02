@@ -1,111 +1,107 @@
-use std::{
-  sync::{Arc, Barrier},
-  thread::JoinHandle,
-  time::Duration,
-};
+use std::sync::Arc;
 
-use crossbeam::{
-  channel::{Receiver, Sender, TryRecvError, TrySendError},
-  queue::ArrayQueue,
-};
 use egui::RawInput;
-use foxy_renderer::renderer::{render_data::RenderData, Renderer};
-use foxy_time::{timer::Timer, Time, TimeSettings};
 use tracing::*;
 use witer::prelude::*;
 
-use super::{
-  builder::{DebugInfo, FoxySettings},
-  runnable::Runnable,
-  state::Foxy,
-  FoxyResult,
-};
-use crate::{
-  core::{
-    message::{GameLoopMessage, RenderLoopMessage},
-    runnable::Flow,
-  },
-  foxy_error,
-};
+use super::{builder::FoxySettings, runnable::Runnable, state::Foxy, FoxyResult};
+use crate::core::runnable::Flow;
 
-pub struct Framework {
-  window: Arc<Window>,
-  preferred_visibility: Visibility,
-  message_sender: Sender<Message>,
-  sync_barrier: Arc<Barrier>,
-
-  // render_queue: Arc<ArrayQueue<RenderData>>,
-  // render_mailbox: Mailbox<RenderLoopMessage, GameLoopMessage>,
-  game_thread: JoinHandle<FoxyResult<()>>,
+pub struct Framework<App: Runnable> {
+  foxy: Foxy,
+  app: App,
 }
 
-impl Framework {
-  pub fn new<App: Runnable>(mut settings: FoxySettings) -> FoxyResult<Self> {
-    let preferred_visibility = settings.window.visibility;
-    settings.window.visibility = Visibility::Hidden;
-    settings.window.close_on_x = false;
+impl<App: Runnable> Framework<App> {
+  pub fn new(settings: FoxySettings) -> FoxyResult<Self> {
+    let window = Arc::new(
+      WindowBuilder::from(
+        settings
+          .window
+          .clone()
+          .with_visibility(Visibility::Hidden)
+          .with_close_on_x(false),
+      )
+      .with_title(settings.title.clone())
+      .with_size(settings.size)
+      .build()?,
+    );
 
-    let window = Arc::new(Window::new(settings.window.clone())?);
-
-    Self::initialize::<App>(settings, window, preferred_visibility)
+    Self::initialize(settings, window)
   }
 }
 
-impl Framework {
-  const GAME_THREAD_ID: &'static str = "foxy";
-  const MAX_FRAME_DATA_IN_FLIGHT: usize = 2;
-
-  fn initialize<App: Runnable>(
-    settings: FoxySettings,
-    window: Arc<Window>,
-    preferred_visibility: Visibility,
-  ) -> FoxyResult<Self> {
+impl<App: Runnable> Framework<App> {
+  fn initialize(settings: FoxySettings, window: Arc<Window>) -> FoxyResult<Self> {
     trace!("Firing up Foxy");
 
-    let (message_sender, message_receiver) = crossbeam::channel::unbounded();
+    // let (message_sender, message_receiver) = crossbeam::channel::unbounded();
 
-    let sync_barrier = Arc::new(Barrier::new(2));
+    // let sync_barrier = Arc::new(Barrier::new(2));
+    let mut foxy = Foxy::new(settings.window.visibility, window.clone(), settings.time, settings.debug_info)?;
+    let app = App::new(&mut foxy);
 
-    let game_thread = Self::game_loop::<App>(
-      window.clone(),
-      settings.time,
-      settings.debug_info,
-      sync_barrier.clone(),
-      message_receiver,
-    )?;
+    // let game_thread = Self::game_loop::<App>(
+    //   settings.window.visibility,
+    //   window.clone(),
+    //   settings.time,
+    //   settings.debug_info,
+    //   sync_barrier.clone(),
+    //   message_receiver,
+    // )?;
 
-    Ok(Self {
-      window,
-      preferred_visibility,
-      message_sender,
-      sync_barrier,
-      game_thread,
-    })
+    Ok(Self { foxy, app })
   }
 
-  pub fn run(self) -> FoxyResult<()> {
+  pub fn run(mut self) -> FoxyResult<()> {
     info!("KON KON KITSUNE!");
 
-    self.sync_barrier.wait();
+    debug!("Kicking off game loop");
 
-    debug!("Kicking off window loop");
+    self.app.start(&mut self.foxy);
 
-    let window = self.window.clone();
+    let window = self.foxy.window.clone();
     for message in window.as_ref() {
-      let should_sync = matches!(message, Message::Window(WindowMessage::Resized(..)));
+      // let raw_input: RawInput = self.foxy.take_egui_raw_input();
 
-      if message.is_some() {
-        self.message_sender.try_send(message).unwrap();
+      match &message {
+        Message::Resized(..) => {
+          self.foxy.renderer.resize();
+        }
+        Message::CloseRequested if self.app.stop(&mut self.foxy) == Flow::Exit => {
+          self.foxy.window.close();
+        }
+        Message::Loop(LoopMessage::Exit) => break,
+        _ => (),
       }
 
-      if should_sync {
-        self.sync_barrier.wait();
+      let handled = self.foxy.handle_input(&message);
+
+      let message = if handled { None } else { Some(message) };
+
+      self.foxy.time.update();
+      while self.foxy.time.should_do_tick_unchecked() {
+        self.foxy.time.tick();
+        self.app.fixed_update(&mut self.foxy, &message);
+      }
+      self.app.update(&mut self.foxy, &message);
+
+      let raw_input: RawInput = self.foxy.take_egui_input();
+      let full_output = self.foxy.egui_context.run(raw_input, |ui| {
+        self.app.egui(&self.foxy, ui);
+      });
+
+      if !self.foxy.render(full_output) {
+        self.foxy.window.close();
       }
     }
 
-    debug!("Wrapping up window loop");
+    debug!("Wrapping up game loop");
 
-    self.game_thread.join().map_err(|e| foxy_error!("{e:?}"))??;
+    self.app.delete();
+    self.foxy.renderer.delete();
+
+    // self.game_thread.join().map_err(|e| foxy_error!("{e:?}"))??;
     // self.renderer.delete();
 
     info!("OTSU KON DESHITA!");
@@ -113,68 +109,32 @@ impl Framework {
     Ok(())
   }
 
-  fn game_loop<App: Runnable>(
-    window: Arc<Window>,
-    time_settings: TimeSettings,
-    debug_info: DebugInfo,
-    sync_barrier: Arc<Barrier>,
-    message_receiver: Receiver<Message>,
-  ) -> FoxyResult<JoinHandle<FoxyResult<()>>> {
-    let handle = std::thread::Builder::new()
-      .name(Self::GAME_THREAD_ID.into())
-      .spawn(move || -> FoxyResult<()> {
-        let mut foxy = Foxy::new(window, time_settings, debug_info)?;
+  // fn game_loop(
+  //   &self,
+  //   preferred_visibility: Visibility,
+  //   window: Arc<Window>,
+  //   time_settings: TimeSettings,
+  //   debug_info: DebugInfo,
+  //   sync_barrier: Arc<Barrier>,
+  //   message_receiver: Receiver<Message>,
+  // ) -> FoxyResult<JoinHandle<FoxyResult<()>>> {
+  //   let handle = std::thread::Builder::new()
+  //     .name(Self::GAME_THREAD_ID.into())
+  //     .spawn(move || -> FoxyResult<()> {
+  //       debug!("Kicking off game loop");
 
-        sync_barrier.wait();
+  //       loop {
+  //         let message = message_receiver.try_recv().ok();
 
-        debug!("Kicking off game loop");
+  //         sync_barrier.wait();
+  //       }
 
-        let mut app = App::new(&mut foxy);
-        app.start(&mut foxy);
+  //       trace!("Exiting game!");
 
-        loop {
-          let message = message_receiver.try_recv().ok().unwrap_or_default();
+  //       debug!("Wrapping up game loop");
+  //       Ok(())
+  //     })?;
 
-          let raw_input: RawInput = foxy.take_egui_raw_input();
-
-          match &message {
-            Message::Window(WindowMessage::Resized(..)) => {
-              foxy.renderer.resize();
-              sync_barrier.wait();
-            }
-            Message::Window(WindowMessage::CloseRequested) if app.stop(&mut foxy) == Flow::Exit => {
-              foxy.window.close();
-              continue;
-            }
-            Message::ExitLoop => break,
-            _ => (),
-          }
-
-          foxy.time.update();
-          while foxy.time.should_do_tick_unchecked() {
-            foxy.time.tick();
-            app.fixed_update(&mut foxy, &message);
-          }
-          app.update(&mut foxy, &message);
-
-          let _full_output = foxy.egui_context.run(raw_input, |ui| {
-            app.egui(&foxy, ui);
-          });
-
-          if !foxy.render() {
-            foxy.window.close();
-          }
-        }
-
-        trace!("Exiting game!");
-
-        app.delete();
-        foxy.renderer.delete();
-
-        debug!("Wrapping up game loop");
-        Ok(())
-      })?;
-
-    Ok(handle)
-  }
+  //   Ok(handle)
+  // }
 }

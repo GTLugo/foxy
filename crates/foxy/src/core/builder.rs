@@ -16,15 +16,30 @@ pub enum DebugInfo {
   Hidden,
 }
 
-#[derive(Default)]
 pub struct FoxySettings {
   pub time: TimeSettings,
+  pub title: String,
+  pub size: Size,
   pub window: WindowSettings,
   pub debug_info: DebugInfo,
 }
 
+impl Default for FoxySettings {
+  fn default() -> Self {
+    Self {
+      time: Default::default(),
+      title: "Foxy Window".to_owned(),
+      size: LogicalSize::new(800.0, 500.0).into(),
+      window: WindowSettings::default(),
+      debug_info: DebugInfo::Hidden,
+    }
+  }
+}
+
 impl FoxySettings {
-  pub fn with_window(mut self, window: WindowSettings) -> Self {
+  pub fn with_window(mut self, title: impl Into<String>, size: impl Into<Size>, window: WindowSettings) -> Self {
+    self.title = title.into();
+    self.size = size.into();
     self.window = window;
     self
   }

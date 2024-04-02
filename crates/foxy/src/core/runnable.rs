@@ -14,11 +14,11 @@ pub trait Runnable {
 
   fn start(&mut self, foxy: &mut Foxy) {}
 
-  fn fixed_update(&mut self, foxy: &mut Foxy, message: &Message) {}
+  fn fixed_update(&mut self, foxy: &mut Foxy, message: &Option<Message>) {}
 
-  fn update(&mut self, foxy: &mut Foxy, message: &Message) {}
+  fn update(&mut self, foxy: &mut Foxy, message: &Option<Message>) {}
 
-  fn late_update(&mut self, foxy: &mut Foxy, message: &Message) {}
+  fn late_update(&mut self, foxy: &mut Foxy, message: &Option<Message>) {}
 
   fn egui(&mut self, foxy: &Foxy, egui: &egui::Context) {}
 
@@ -41,6 +41,6 @@ pub trait Runnable {
   where
     Self: Sized,
   {
-    Framework::new::<Self>(Self::settings())?.run()
+    Framework::<Self>::new(Self::settings())?.run()
   }
 }

@@ -39,7 +39,7 @@ impl FoxySwapchain {
   ) -> Result<Self, RendererError> {
     let window_size = window.inner_size();
     let extent_2d = window.inner_size().into();
-    let extent_3d = [window_size.width as u32, window_size.height as u32, 1];
+    let extent_3d = [window_size.width, window_size.height, 1];
     let mut viewport = Viewport {
       offset: [0.0, 0.0],
       extent: [0.0, 0.0],

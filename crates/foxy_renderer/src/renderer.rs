@@ -102,7 +102,7 @@ impl Renderer {
         load_op: AttachmentLoadOp::Clear,
         store_op: AttachmentStoreOp::Store,
         image_layout: ImageLayout::General,
-        clear_value: Some(ClearValue::Float([0.2, 0.2, 0.2, 1.0])),
+        clear_value: Some(ClearValue::Float([0.1, 0.2, 0.3, 1.0])),
         ..RenderingAttachmentInfo::image_view(self.swapchain.draw_image_view())
       };
 
