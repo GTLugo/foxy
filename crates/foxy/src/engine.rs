@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use ash::vk;
 use winit::{
@@ -117,9 +117,23 @@ impl ApplicationHandler for EngineCompositor {
       WindowEvent::KeyboardInput { event, .. } => {
         tracing::debug!("{event:?}");
       }
+      WindowEvent::Resized(_) => {
+        let window = self.window.as_ref().unwrap();
+        let engine = self.engine.as_mut().unwrap();
+
+        engine.stop_rendering = window.is_minimized().unwrap_or_default();
+
+        tracing::debug!("stop_rendering: {}", engine.stop_rendering);
+      }
       WindowEvent::RedrawRequested => {
-        self.engine.as_mut().unwrap().draw();
-        // self.window.as_ref().unwrap().request_redraw();
+        let engine = self.engine.as_mut().unwrap();
+        
+        if engine.stop_rendering {
+          std::thread::sleep(Duration::from_millis(100));
+        }
+
+        engine.draw();
+        self.window.as_ref().unwrap().request_redraw();
       }
       _ => (),
     }
