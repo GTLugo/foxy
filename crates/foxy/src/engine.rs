@@ -128,12 +128,15 @@ impl ApplicationHandler for EngineCompositor {
       WindowEvent::RedrawRequested => {
         let engine = self.engine.as_mut().unwrap();
         
-        if engine.stop_rendering {
-          std::thread::sleep(Duration::from_millis(100));
-        }
+        // if engine.stop_rendering {
+        //   std::thread::sleep(Duration::from_millis(100));
+        // }
 
         engine.draw();
-        self.window.as_ref().unwrap().request_redraw();
+
+        if !engine.stop_rendering {
+          self.window.as_ref().unwrap().request_redraw();
+        }
       }
       _ => (),
     }
