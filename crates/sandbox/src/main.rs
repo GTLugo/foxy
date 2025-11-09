@@ -7,7 +7,7 @@ fn main() {
     .pretty()
     .init();
 
-  foxy::Engine::builder()
+  foxy::Engine::setup()
     .with_title("Vulkan")
     .with_window_extent(800, 500)
     .run();
