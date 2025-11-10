@@ -1,19 +1,21 @@
 mod builder;
 mod compositor;
+mod instance;
+mod swapchain;
 
 use std::sync::Arc;
 
 use ash::vk;
 use winit::window::Window;
 
-use crate::engine::builder::EngineBuilder;
+use crate::engine::{builder::EngineBuilder, instance::Vulkan, swapchain::Swapchain};
 
-#[derive(Debug)]
 pub struct Engine {
   pub window: Arc<Window>,
-  pub frame_number: u64,
-  pub stop_rendering: bool,
-  pub window_extent: vk::Extent2D,
+  vulkan: Vulkan,
+  swapchain: Swapchain,
+  frame_number: u64,
+  stop_rendering: bool,
 }
 
 impl Engine {
@@ -23,23 +25,28 @@ impl Engine {
 
   fn new(window: Arc<Window>) -> Self {
     tracing::trace!("Initializing engine");
-    let size = window.inner_size();
+
+    let vulkan = Vulkan::new(window.clone());
+    tracing::info!("Selected Device: `{} | {}`", vulkan.device_name(), vulkan.api_version().as_string());
+
+    let swapchain = Swapchain::new(vulkan.instance.clone(), vulkan.device.clone(), window.clone());
+
     Self {
+      window,
+      vulkan,
+      swapchain,
       frame_number: 0,
       stop_rendering: false,
-      window_extent: vk::Extent2D {
-        width: size.width,
-        height: size.height,
-      },
-      window,
     }
   }
 
   fn cleanup(&mut self) {
     tracing::trace!("Stopping engine");
+    self.swapchain.destroy();
+    self.vulkan.destroy();
   }
 
   fn draw(&mut self) {
-    tracing::trace!("Drawing");
+    // tracing::trace!("Drawing");
   }
 }
